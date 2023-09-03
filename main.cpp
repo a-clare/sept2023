@@ -5,12 +5,25 @@
 #include "implot.h"
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"
+#include "camera.h"
+#include "robot.h"
 
-GLFWwindow *window;
+static GLFWwindow *window;
+static Camera camera;
+void ScrollCallback(GLFWwindow *win,
+                    double xoffset,
+                    double yoffset);
 static void SetupWindow();
 
 int main() {
   SetupWindow();
+  camera.position_ = glm::vec3(0, 0, 10);
+  camera.Update();
+
+  Robot robot;
+  robot.length_ = 1;
+  robot.width_ = 0.5;
+  robot.Init();
 
   while (!glfwWindowShouldClose(window)) {
     // Start of frame
@@ -22,6 +35,31 @@ int main() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
+    glm::mat4 projection = glm::perspective(glm::radians(camera.zoom_),
+                                            (float)1200 / (float)800,
+                                            0.1f,
+                                            100.0f);
+    robot.shader_.SetMat4("projection", projection);
+    robot.shader_.SetMat4("view", camera.GetViewMatrix());
+
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_W))) {
+      robot.position_.y += 0.2;
+      robot.UpdateModelMatrix();
+    }
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_S))) {
+      robot.position_.y -= 0.2;
+      robot.UpdateModelMatrix();
+    }
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_A))) {
+      robot.position_.x -= 0.2;
+      robot.UpdateModelMatrix();
+    }
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_D))) {
+      robot.position_.x += 0.2;
+      robot.UpdateModelMatrix();
+    }
+
+    robot.Draw();
 
     // End of frame
     int display_w, display_h;
@@ -74,7 +112,7 @@ void SetupWindow() {
 
 //  glfwSetFramebufferSizeCallback(gui_state.glfw_window, WindowResizeCallback);
 //  glfwSetCursorPosCallback(gui_state.glfw_window, mouse_position_callback);
-//  glfwSetScrollCallback(gui_state.glfw_window, mouse_scroll_callback);
+  glfwSetScrollCallback(window, ScrollCallback);
 //  glfwSetMouseButtonCallback(gui_state.glfw_window, mouse_button_callback);
 
   glfwMakeContextCurrent(window);
@@ -107,4 +145,11 @@ void SetupWindow() {
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   const char* glsl_version = "#version 330";
   ImGui_ImplOpenGL3_Init(glsl_version);
+}
+
+void ScrollCallback(GLFWwindow *win,
+                    double xoffset,
+                    double yoffset) {
+  printf("yoffset: %.3f\n", yoffset);
+  camera.UpdateZoom(static_cast<float>(yoffset));
 }
