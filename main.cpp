@@ -150,6 +150,5 @@ void SetupWindow() {
 void ScrollCallback(GLFWwindow *win,
                     double xoffset,
                     double yoffset) {
-  printf("yoffset: %.3f\n", yoffset);
   camera.UpdateZoom(static_cast<float>(yoffset));
 }
