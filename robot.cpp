@@ -67,7 +67,14 @@ void Robot::Init() {
 void Robot::UpdateModelMatrix() {
   // TODO: Assert here if length/width/height < 0
 
-  model_ = glm::translate(glm::mat4(1.0f), position_);
+  // We are only working in 2D so we force the Z component of the translation to 0.
+  // If we dont do this, we are setting z to the theta value (position_ is [x, y, theta])
+  model_ = glm::translate(glm::mat4(1.0f), glm::vec3(position_[0], position_[1], 0));
+
+  // We are rotating around the Z axis, hence the [0, 0, 1]
+  // And the way glm::rotate works, positive rotation is counter clockwise, but we want
+  // positive rotation to be clockwise, so we change the sign of the rotation
+  model_ = glm::rotate(model_, -position_[2], glm::vec3(0, 0, 1));
 
   // Since the default vertices are for a 1x1x1 cube, the robot l/w/h parameters can be used as
   // the scaling values (which are the diagonals of the model matrix)

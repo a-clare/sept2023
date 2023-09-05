@@ -11,6 +11,7 @@ struct Robot {
   uint32_t vao_;
   uint32_t vbo_;
 
+  // [x, y, theta]
   glm::vec3 position_ = glm::vec3(0, 0, 0);
   float length_;
   float width_;

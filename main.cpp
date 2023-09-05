@@ -25,6 +25,12 @@ int main() {
   robot.width_ = 0.5;
   robot.Init();
 
+  bool simulation_running = false;
+  double linear_velocity = 0;
+  double angular_velocity = 0;
+  const double linear_velocity_step = 0.1;
+  const double angular_velocity_step = 0.5;
+  const double simulation_dt = 0.01;
   while (!glfwWindowShouldClose(window)) {
     // Start of frame
     glfwPollEvents();
@@ -35,6 +41,25 @@ int main() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    if (ImGui::Begin("Simulation", NULL, ImGuiWindowFlags_None)) {
+
+      ImGui::Text("W: + step linear velocity");
+      ImGui::Text("S: - step linear velocity");
+      ImGui::Text("A: - step angular velocity");
+      ImGui::Text("D: + step angular velocity");
+      ImGui::Text("R: Reset to 0");
+      ImGui::BeginDisabled();
+      ImGui::Checkbox("Simulation Started (space key)", &simulation_running);
+
+      ImGui::InputDouble("Linear Velocity", &linear_velocity, 0, 0, "%.2f m/s");
+      ImGui::InputDouble("Angular Velocity", &angular_velocity, 0, 0, "%.2f deg/s");
+      ImGui::EndDisabled();
+    }
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Space))) {
+      simulation_running = !simulation_running;
+    }
+
     glm::mat4 projection = glm::perspective(glm::radians(camera.zoom_),
                                             (float)1200 / (float)800,
                                             0.1f,
@@ -42,25 +67,76 @@ int main() {
     robot.shader_.SetMat4("projection", projection);
     robot.shader_.SetMat4("view", camera.GetViewMatrix());
 
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_W))) {
-      robot.position_.y += 0.2;
+    // Keep theta between [0, 360)
+    if (robot.position_[2] >= 360 * M_PI / 180) {
+      robot.position_[2] -= 360 * M_PI / 180;
+    }
+    else if (robot.position_[2] < 0) {
+      robot.position_[2] += 360 * M_PI / 180;
+    }
+
+    // TODO: Add limits on each linear/angular velocities
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_R))) {
+      linear_velocity = 0;
+      angular_velocity = 0;
+      robot.position_ = glm::vec3(0, 0, 0);
       robot.UpdateModelMatrix();
+    }
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_W))) {
+      linear_velocity += linear_velocity_step;
     }
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_S))) {
-      robot.position_.y -= 0.2;
+      linear_velocity -= linear_velocity_step;
+    }
+    if (ImGui::IsKeyDown(ImGui::GetKeyIndex(ImGuiKey_A))) {
+//      printf("yes\n");
+      angular_velocity -= angular_velocity_step;
+    }
+    else if (ImGui::IsKeyReleased((ImGui::GetKeyIndex(ImGuiKey_A)))) {
+      angular_velocity = 0;
+    }
+    if (ImGui::IsKeyDown(ImGui::GetKeyIndex(ImGuiKey_D))) {
+      angular_velocity += angular_velocity_step;
+    }
+    else if (ImGui::IsKeyReleased((ImGui::GetKeyIndex(ImGuiKey_D)))) {
+      angular_velocity = 0;
+    }
+
+    if (simulation_running) {
+      /*
+       * We want theta to be:
+       * 1. Positive rotation means clockwise (not counter clockwise)
+       * 2. With respect to the Y axis (up/down on the screen, X is left/right)
+       * This way it is the same as heading in geodetic/gnss/ins navigation. Heading angle
+       * is the angle with respect to North axis (up/down) and positive heading rotation means going clockwise
+       * This is why the calculations below for X and Y position and swapped (cosine instead of sine, and vice
+       * versa).
+       */
+      double w = angular_velocity * M_PI / 180 * simulation_dt;
+      double v = linear_velocity * simulation_dt;
+      // Near 0, so assume driving in a straight line
+      if (abs(w) < 1.0e-5 ) {
+        double y = robot.position_[1] += v * cos(robot.position_[2]);
+        double x = robot.position_[0] += v * sin(robot.position_[2]);
+        robot.position_ = glm::vec3(x, y, robot.position_[2]);
+      }
+      else {
+        double theta_old = robot.position_[2];
+        double r = v / w;
+        robot.position_[2] += w;
+        robot.position_[1] += r * (sin(robot.position_[2]) - sin(theta_old));
+        robot.position_[0] += -r * (cos(robot.position_[2]) - cos(theta_old));
+      }
       robot.UpdateModelMatrix();
     }
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_A))) {
-      robot.position_.x -= 0.2;
-      robot.UpdateModelMatrix();
-    }
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_D))) {
-      robot.position_.x += 0.2;
-      robot.UpdateModelMatrix();
-    }
+
+    ImGui::Text("Robot X: %.3f", robot.position_[0]);
+    ImGui::Text("Robot Y: %.3f", robot.position_[1]);
+    ImGui::Text("Robot T: %.3f", robot.position_[2] * 180 / M_PI);
 
     robot.Draw();
 
+    ImGui::End();
     // End of frame
     int display_w, display_h;
     glfwGetFramebufferSize(window, &display_w, &display_h);
